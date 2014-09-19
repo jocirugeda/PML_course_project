@@ -1,0 +1,193 @@
+---
+title: "Human Activity Recognition"
+author: "Javier Ortega Cirugeda"
+date: "19/09/2014"
+output: html_document
+---
+
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount 
+of data about personal activity relatively inexpensively. 
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. 
+
+
+The available data to build the model:
+
+- the training dataset (160 variables and 19622 obs.  includes "classe" variable)
+- additional test cases for scoring with the model (160 variables 20 obs. don't include "classe" variable)
+
+
+## Data cleaning/processing 
+
+From the CSV files ( testing, training ) , load with the option , not to create factor from char columns.
+
+```{r warning=FALSE,message=FALSE}
+
+#auxiliar functions in another source ( also included in the same repository as the .Rmd file)
+source("aux_functions.R")
+
+# load without creating factors
+train_input_data<-read.csv('pml-training.csv',stringsAsFactors=FALSE)
+final_test_data<-read.csv('pml-testing.csv',stringsAsFactors=FALSE)
+
+```
+
+Once loaded, select only those variables related to physics measures, and the outcome "classe" that really will work as factor. 
+For the rest of columns ,  were forced to numeric format because all of them should have that format. The conversion process assign NA to all values not numeric, making the data cleansing in all those columns previously identified as char because of error values.
+
+```{r warning=FALSE,message=FALSE}
+
+#remove not fisical measures
+
+train_input_data<-subset(train_input_data,select = c(-user_name,-cvtd_timestamp,-new_window,-raw_timestamp_part_1,-raw_timestamp_part_2,-num_window))
+
+
+final_test_data<-subset(final_test_data,select = c(-user_name,-cvtd_timestamp,-new_window,-raw_timestamp_part_1,-raw_timestamp_part_2,-num_window))
+
+#set as factor outcome variable classe
+train_input_data$classe<-factor(train_input_data$classe)
+
+
+# process data cleaning / formating
+train_input_data<-force_to_numeric(train_input_data)
+final_test_data<-force_to_numeric(final_test_data)
+
+```
+
+The dataset obtained at this point has 154 variables , but in most of the columns there is a lot of NA values, because of that, we discart those columns that the proportion of NA is greater than 0.5
+
+```{r warning=FALSE,message=FALSE}
+
+#DROP from training dataset Columns with many NA
+train_input_data<-drop_BY_P_NA(train_input_data)
+
+
+```
+
+After discart those columns we still have 54 variables, to refine more the columns to use , we use the function nearZeroVar from the package caret to discart the columns that don't add predictive information to the model. In this step any column is discarted.
+
+
+```{r message=FALSE}
+
+library(caret)
+
+set.seed(1234)
+
+# # Split  train_input_data ( PREDICTOR - OUTCOME)
+classe<-train_input_data$classe
+predictors<-subset(train_input_data, select = -classe) 
+
+## Zero vars extraction
+zero_vars_indexes<-nearZeroVar(predictors,saveMetrics = FALSE)
+
+if (length(zero_vars_indexes)>0){
+        nonZeroPredictors<-subset(predictors,select=zero_vars_indexes*-1)
+}else{
+        nonZeroPredictors<-predictors
+}
+
+```
+
+The result of this combination of transformations, and the selection of columns, have filtered all the NA previously detected in the original dataset. This means that we have reduced de dataset size loosing a minimal amount of information from the original one with all the columns.
+
+```{r warning=FALSE,message=FALSE}
+
+# merge final training dataset
+train_vars<-data.frame(classe,nonZeroPredictors)
+
+# comparison number of rows without NA
+no_NA_rows<-na.omit(train_vars)
+nrow(no_NA_rows)
+nrow(train_vars)
+
+```
+
+
+## Model Method Selection
+
+We have choose to train the model with the Random Forest method, because this method not require asummptions on the input data, or normalization of the variables before use in the model. 
+
+Because the model is a discrete clasification problem (discrete outcome), we have choose to set (metric="Accuracy") in the train process.
+
+
+## Model Cross validation 
+
+We have setup trainig and testing dataset  (60/40), in order to obtain one messure of the expected out of sample error
+```{r warning=FALSE,message=FALSE}
+
+# Create test set / training set from train_vars
+inTrain = createDataPartition(train_vars$classe, p = 0.6)[[1]]
+training = train_vars[ inTrain,]
+testing = train_vars[-inTrain,]
+
+```
+
+
+## Training Process
+
+For the train process , we have setup the cross valitation method to bootstrap with 25 repeats with ratio (75/25) train/test.
+In order to reduce computing time we have activated (allowParallel=TRUE), to use multiples cores.
+
+```{r warning=FALSE,message=FALSE}
+
+# model training
+modelFit<-train(classe ~ .,method="rf",metric="Accuracy",maximize =TRUE,data=training,trControl=trainControl(method="boot",number=25,repeats=25,p=0.75,allowParallel=TRUE))
+
+
+```
+
+
+## Expected In/Out Sample Error
+
+
+With the training dataset  ( 60% of data), we have computed the In Sample Error 
+
+```{r warning=FALSE,message=FALSE}
+
+# Cross Validation with training data
+pred_train<-predict(modelFit,training)
+confusionMatrix(pred_train,training$classe)
+
+```
+
+
+With the testing dataset reserved ( 40% of data), we have computed the Out Sample Error 
+
+```{r warning=FALSE,message=FALSE}
+
+# Cross Validation with testing data
+pred_test<-predict(modelFit,testing)
+confusionMatrix(pred_test,testing$classe)
+
+```
+
+## Model Validation From Study of Out of Sample Error
+
+As a result of the data obtained , the p-values , the Accuracy, the Kappa , and the class Statistics, we can said that the model is valid  with the data available.
+
+One of the problems of this project is the high number of discarted variables from the model. Most of the variables have been dropped because of the high ratio of NA in their values ( more than 80 %). 
+
+One posible problem related to the model is the overfitting, but with the available data is not posible to discard.
+
+
+
+## Prediccion of additional Test cases
+
+```{r }
+# Predict Additional Dataset
+final_prediction<-predict(modelFit,final_test_data)
+
+# echo of computed predictions
+final_prediction
+
+# file generation for submit
+pml_write_files(final_prediction)
+
+```
+
+
