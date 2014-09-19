@@ -10,7 +10,7 @@
 
 <meta name="author" content="Javier Ortega Cirugeda" />
 
-<meta name="date" content="2014-12-08" />
+<meta name="date" content="2014-12-09" />
 
 <title>Human Activity Recognition</title>
 
@@ -55,7 +55,7 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 <div id="header">
 <h1 class="title">Human Activity Recognition</h1>
 <h4 class="author"><em>Javier Ortega Cirugeda</em></h4>
-<h4 class="date"><em>20/08/2014</em></h4>
+<h4 class="date"><em>19/09/2014</em></h4>
 </div>
 
 
@@ -79,14 +79,25 @@ source(&quot;aux_functions.R&quot;)
 # load without creating factors
 train_input_data&lt;-read.csv('pml-training.csv',stringsAsFactors=FALSE)
 final_test_data&lt;-read.csv('pml-testing.csv',stringsAsFactors=FALSE)</code></pre>
-<p>Once loaded, convert to Factors only those that really will work as factors. For the rest of columns , were forced to numeric format because all of them should have that format. The conversion process assign NA to all values not numeric, making the data cleansing in al those columns previously identified as char because of error values.</p>
-<pre class="r"><code># process data cleaning / formating
-train_input_data&lt;-process_initial(train_input_data)
-final_test_data&lt;-process_initial(final_test_data)</code></pre>
-<p>The dataset obtained at this point has 160 variables , but in most of the columns there is a lot of NA values, because of that, we discart those columns that the proportion of NA is greater than 0.5</p>
+<p>Once loaded, select only those variables related to physics measures, and the outcome “classe” that really will work as factor. For the rest of columns , were forced to numeric format because all of them should have that format. The conversion process assign NA to all values not numeric, making the data cleansing in all those columns previously identified as char because of error values.</p>
+<pre class="r"><code>#remove not fisical measures
+
+train_input_data&lt;-subset(train_input_data,select = c(-user_name,-cvtd_timestamp,-new_window,-raw_timestamp_part_1,-raw_timestamp_part_2,-num_window))
+
+
+final_test_data&lt;-subset(final_test_data,select = c(-user_name,-cvtd_timestamp,-new_window,-raw_timestamp_part_1,-raw_timestamp_part_2,-num_window))
+
+#set as factor outcome variable classe
+train_input_data$classe&lt;-factor(train_input_data$classe)
+
+
+# process data cleaning / formating
+train_input_data&lt;-force_to_numeric(train_input_data)
+final_test_data&lt;-force_to_numeric(final_test_data)</code></pre>
+<p>The dataset obtained at this point has 154 variables , but in most of the columns there is a lot of NA values, because of that, we discart those columns that the proportion of NA is greater than 0.5</p>
 <pre class="r"><code>#DROP from training dataset Columns with many NA
 train_input_data&lt;-drop_BY_P_NA(train_input_data)</code></pre>
-<p>After discart those columns we still have 60 variables, to refine more the columns to use , we use the function nearZeroVar from the package caret to discart the columns that don’t add predictive information to the model. In this step one more column is discarted.</p>
+<p>After discart those columns we still have 54 variables, to refine more the columns to use , we use the function nearZeroVar from the package caret to discart the columns that don’t add predictive information to the model. In this step any column is discarted.</p>
 <pre class="r"><code>library(caret)
 
 set.seed(1234)
@@ -97,7 +108,12 @@ predictors&lt;-subset(train_input_data, select = -classe)
 
 ## Zero vars extraction
 zero_vars_indexes&lt;-nearZeroVar(predictors,saveMetrics = FALSE)
-nonZeroPredictors&lt;-subset(predictors,select=zero_vars_indexes*-1)</code></pre>
+
+if (length(zero_vars_indexes)&gt;0){
+        nonZeroPredictors&lt;-subset(predictors,select=zero_vars_indexes*-1)
+}else{
+        nonZeroPredictors&lt;-predictors
+}</code></pre>
 <p>The result of this combination of transformations, and the selection of columns, have filtered all the NA previously detected in the original dataset. This means that we have reduced de dataset size loosing a minimal amount of information from the original one with all the columns.</p>
 <pre class="r"><code># merge final training dataset
 train_vars&lt;-data.frame(classe,nonZeroPredictors)
@@ -203,7 +219,9 @@ confusionMatrix(pred_test,testing$classe)</code></pre>
 </div>
 <div id="model-validation-from-study-of-out-of-sample-error" class="section level2">
 <h2>Model Validation From Study of Out of Sample Error</h2>
-<p>As a result of the data obtained , the p-values , the Accuracy, the Kappa , and the class Statistics, we can said that the model is valid enought with the samples available.</p>
+<p>As a result of the data obtained , the p-values , the Accuracy, the Kappa , and the class Statistics, we can said that the model is valid with the data available.</p>
+<p>One of the problems of this project is the high number of discarted variables from the model. Most of the variables have been dropped because of the high ratio of NA in their values ( more than 80 %).</p>
+<p>One posible problem related to the model is the overfitting, but with the available data is not posible to discard.</p>
 </div>
 <div id="prediccion-of-additional-test-cases" class="section level2">
 <h2>Prediccion of additional Test cases</h2>
